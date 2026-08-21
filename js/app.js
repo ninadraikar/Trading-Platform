@@ -155,7 +155,9 @@ function renderSnapshot(quote, profile, data) {
 
 function renderPriceChart(history) {
   const ctx = document.getElementById("price-chart");
-  const series = Array.isArray(history?.historical) ? [...history.historical].reverse() : [];
+  // FMP /stable/historical-price-eod/full returns a flat array (newest first).
+  const raw = Array.isArray(history) ? history : Array.isArray(history?.historical) ? history.historical : [];
+  const series = [...raw].reverse();
 
   if (priceChart) priceChart.destroy();
   if (!series.length) return;
