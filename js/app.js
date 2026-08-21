@@ -5,7 +5,7 @@
 // After you deploy the "netlify/functions" folder to Netlify, replace the URL
 // below with your real Netlify site address, e.g.:
 //   https://your-site-name.netlify.app/.netlify/functions/stock-data
-const API_ENDPOINT = "https://YOUR-NETLIFY-SITE.netlify.app/.netlify/functions/stock-data";
+const API_ENDPOINT = "https://fantastic-llama-2dcc9e.netlify.app/.netlify/functions/stock-data";
 
 const form = document.getElementById("lookup-form");
 const input = document.getElementById("ticker-input");
