@@ -4,8 +4,9 @@
 // The FMP_API_KEY environment variable is set in the Netlify dashboard
 // (Site settings -> Environment variables) and is NEVER exposed to the browser.
 
-const BASE = "https://financialmodelingprep.com/api/v3";
-const BASE_STABLE = "https://financialmodelingprep.com/stable";
+// FMP retired free-tier access to /api/v3/ — everything now goes through /stable/,
+// which uses ?symbol=XXX query params instead of /XXX path params.
+const BASE = "https://financialmodelingprep.com/stable";
 
 exports.handler = async (event) => {
   const headers = {
@@ -29,22 +30,22 @@ exports.handler = async (event) => {
     };
   }
 
-  // Each entry: [resultKey, url]
+  // Each entry: [resultKey, url] — all on /stable/, symbol passed as a query param.
   const endpoints = {
-    quote: `${BASE}/quote/${symbol}?apikey=${apiKey}`,
-    profile: `${BASE}/profile/${symbol}?apikey=${apiKey}`,
-    history: `${BASE}/historical-price-full/${symbol}?timeseries=365&apikey=${apiKey}`,
-    income: `${BASE}/income-statement/${symbol}?limit=6&apikey=${apiKey}`,
-    incomeQuarterly: `${BASE}/income-statement/${symbol}?period=quarter&limit=6&apikey=${apiKey}`,
-    ratios: `${BASE}/ratios/${symbol}?limit=6&apikey=${apiKey}`,
-    keyMetrics: `${BASE}/key-metrics/${symbol}?limit=6&apikey=${apiKey}`,
-    growth: `${BASE}/financial-growth/${symbol}?limit=6&apikey=${apiKey}`,
-    insiderTrading: `${BASE}/insider-trading?symbol=${symbol}&limit=20&apikey=${apiKey}`,
-    institutionalOwnership: `${BASE_STABLE}/institutional-ownership/symbol-summary?symbol=${symbol}&apikey=${apiKey}`,
-    analystEstimates: `${BASE}/analyst-estimates/${symbol}?limit=4&apikey=${apiKey}`,
-    peers: `${BASE_STABLE}/stock-peers?symbol=${symbol}&apikey=${apiKey}`,
-    dividends: `${BASE}/historical-price-full/stock_dividend/${symbol}?apikey=${apiKey}`,
-    earningsCalendar: `${BASE}/earning_calendar/${symbol}?apikey=${apiKey}`,
+    quote: `${BASE}/quote?symbol=${symbol}&apikey=${apiKey}`,
+    profile: `${BASE}/profile?symbol=${symbol}&apikey=${apiKey}`,
+    history: `${BASE}/historical-price-eod/full?symbol=${symbol}&apikey=${apiKey}`,
+    income: `${BASE}/income-statement?symbol=${symbol}&limit=6&apikey=${apiKey}`,
+    incomeQuarterly: `${BASE}/income-statement?symbol=${symbol}&period=quarter&limit=6&apikey=${apiKey}`,
+    ratios: `${BASE}/ratios?symbol=${symbol}&limit=6&apikey=${apiKey}`,
+    keyMetrics: `${BASE}/key-metrics?symbol=${symbol}&limit=6&apikey=${apiKey}`,
+    growth: `${BASE}/financial-growth?symbol=${symbol}&limit=6&apikey=${apiKey}`,
+    insiderTrading: `${BASE}/insider-trading/search?symbol=${symbol}&limit=20&apikey=${apiKey}`,
+    institutionalOwnership: `${BASE}/institutional-ownership/symbol-summary?symbol=${symbol}&apikey=${apiKey}`,
+    analystEstimates: `${BASE}/analyst-estimates?symbol=${symbol}&limit=4&apikey=${apiKey}`,
+    peers: `${BASE}/stock-peers?symbol=${symbol}&apikey=${apiKey}`,
+    dividends: `${BASE}/dividends?symbol=${symbol}&apikey=${apiKey}`,
+    earningsCalendar: `${BASE}/earnings?symbol=${symbol}&apikey=${apiKey}`,
   };
 
   const results = {};
@@ -70,21 +71,26 @@ exports.handler = async (event) => {
     })
   );
 
-  // Second pass: pull quotes for a handful of peer symbols, if we got any back.
-  const peerList = Array.isArray(results.peers?.[0]?.peersList)
-    ? results.peers[0].peersList
-    : Array.isArray(results.peers)
-    ? results.peers.map((p) => p.symbol).filter(Boolean)
+  // Second pass: /stable/quote only takes one symbol per call, so fetch each
+  // peer individually (in parallel) to get PE / % change alongside price/mktCap.
+  const peerList = Array.isArray(results.peers)
+    ? results.peers.map((p) => p.symbol).filter(Boolean).slice(0, 5)
     : [];
 
   if (peerList.length) {
-    const topPeers = peerList.slice(0, 5).join(",");
-    try {
-      const res = await fetch(`${BASE}/quote/${topPeers}?apikey=${apiKey}`);
-      results.peerQuotes = res.ok ? await res.json() : [];
-    } catch {
-      results.peerQuotes = [];
-    }
+    const peerQuotes = await Promise.all(
+      peerList.map(async (sym) => {
+        try {
+          const res = await fetch(`${BASE}/quote?symbol=${sym}&apikey=${apiKey}`);
+          if (!res.ok) return null;
+          const arr = await res.json();
+          return Array.isArray(arr) ? arr[0] : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+    results.peerQuotes = peerQuotes.filter(Boolean);
   } else {
     results.peerQuotes = [];
   }
